@@ -1,5 +1,8 @@
-import argparse
+﻿import argparse
 import socket
+import RxPLayer
+import FxA
+import time
 
 #debug print
 def dprint(x):
@@ -15,6 +18,7 @@ parser.add_argument('emu_port_arg', metavar = 'EP', type = int, help = 'NetEmu p
 parser.add_argument('-d', dest = 'debug', help = 'enable debug messages', action = 'store_const', const = 1, default = 0)
 args = parser.parse_args()
 
+#See inputs
 dprint("Mode: " + args.command_arg)
 dprint("Binding Port: " + str(args.port_arg))
 dprint("EMU address: " + args.emu_ip_arg + ":" + str(args.emu_port_arg))
@@ -34,3 +38,17 @@ if args.port_arg < 0 or args.port_arg > 65535:
     print("Invalid binding port. Please use a valid port number.")
 if args.emu_port_arg < 0 or args.emu_port_arg > 65535:
     print("Invalid binding port. Please use a valid port number.")
+
+#create RxP layer
+rxplayer = RxPLayer.RxPLayer()
+
+if isServer:
+    connection = rxplayer.Initialize(1024)
+    connection.Listen(args.port_arg)
+
+if isClient:
+    connection = rxplayer.Initialize(1024)
+    connection.Connect(args.port_arg, args.emu_ip_arg, args.emu_port_arg)
+    while True:
+        connection.Send(bytes("TESTING TESTING RA RA RA", 'ASCII'))
+        time.sleep(.3)
