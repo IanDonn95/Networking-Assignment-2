@@ -22,14 +22,35 @@ class RxPConnection:
         if self.state == "LISTEN":
             if header[6] == 1:
                 print("SYN received. Opening new connection.")
-                newcon = self.layer.addNewConnection(header)
+                newcon = self.layer.addNewConnection(header, bufferSize)
                 newcon.handlePacket(header, data)
-        if self.state = "ClIENT-CONNECTING":
-                
+        if self.state == "ClIENT-CONNECTING":
+            if header[6] == 1:      # SYN
+                # SEND SYN+ACK
+            elif header[7] == 1:    # ACK
+                self.state = "ESTABLISHED"
         if self.state == "ESTABLISHED":
             if len(self.inbuffer) + header[4] <= self.bufferSize: #buffer cna take data
-                if self.sequence_number
-                self.inbuffer = self.inbuffer + data
+                if self.sequence_number:
+                    self.inbuffer = self.inbuffer + data
+            if header[8] == 1:          # END
+                # SEND ACK
+                self.state = "RECEIVED-CLOSING"
+        if self.state == "INITIATED-CLOSING":
+            if header[7] == 1:      #  ACK
+                self.state = "INITIATOR-READY":
+            elif header[8] == 1:    # END
+                # SEND ACK
+                self.state = "SIMULTANEOUS-CLOSING"
+        if self.state == "SIMULTANEOUS-CLOSING":
+            if header[7] == 1:  # ACK
+                # remove connection
+                self.state = "TIMING-OUT"   # --> MAYBE HANDLE DIFFERENTLY
+        if self.state == "INITIATOR-READY":
+            if header[8] == 1:  # END
+                # SEND ACK
+                # remove connection
+                self.state = "TIMING-OUT"   # --> MAYBE HANDLE DIFFERENTLY
 
     def Send(self, data):
         print("Buffering data")
@@ -51,7 +72,14 @@ class RxPConnection:
         a=1
 
     def Close(self):
-        a=1
+        if self.state == "ESTABLISHED":
+            # SEND END
+            self.state = "INITIATED-CLOSING"
+        elif self.state == "RECEIVIED-CLOSING":
+            # SEND END
+            self.state = "RECEIVER-READY"
+        else:
+            print("can't close right now")
 
     def SetBuffer(self, buffer):
         self.bufferSize = buffer # is this wrong? I was pretty sure this is it
@@ -90,6 +118,14 @@ class RxPLayer:
         self.connections += [newConn]
         return newConn
 
+    def addNewConnection(self, header, buffer):
+        newConn = self.Initialize(buffer)
+        newConn.state = "ClIENT-CONNECTING"
+        newConn.destination_Port = header[0]
+        self.addListeningPort(header[0], buffer)
+        return newConn
+
+
     #adds a new UDP socket to listen on if no active connections are already using it
     def addListeningPort(self, portnum, buffer):
         self.inbound_buffer_lock.acquire()
@@ -105,6 +141,22 @@ class RxPLayer:
             self.UDPlayer[portnum] = (sock, buffer, count + 1)
         self.inbound_buffer_lock.release()
         self.outbound_buffer_lock.release()
+
+    # removes the port from the dictionary
+    # removes all connections with that source port number
+    def closePort(self, portnum):
+        self.inbound_buffer_lock.acquire()
+        self.outbound_buffer_lock.acquire()
+
+        self.UDPlayer.pop(portnum)
+        tempArray = self.connections
+        for connection in self.connections:
+            if (connection.source_Port == portnum):
+                tempArray.remove(connection)
+        self.connections = tempArray
+        self.inbound_buffer_lock.release()
+        self.outbound_buffer_lock.release()
+
 
     def monitor_UDP(self):
         print("UDP Monitoring initiated")
@@ -155,7 +207,7 @@ class RxPLayer:
             self.outbound_buffer_lock.acquire()
             for connection in self.connections:
                 if len(connection.outbuffer) > 0:
-                    self.send(connection.outbuffer, connection, 0)
+                    self.send(connection.outbuffer, connection, 0, 0 ,0 ,0)  # data, connection, acknum, synbit, ackbit, endbit
             self.outbound_buffer_lock.release()
 
     def getConnectionForPacket(self, headertuple):
@@ -166,11 +218,12 @@ class RxPLayer:
                 return connection
         print("No exact connection found")
         for connection in self.connections:
-            if connection.source_Port == headertuple[1]:
+            if connection.source_Port == headertuple[1] and connection.destination_Port == 0:
                 print("Open connection found")
                 return connection
         return 0
-    def send(self, data, connection, ack):
+
+    def send(self, data, connection, ackNum, synbit, ackbit, endbit):
         cs = connection.source_Port
         srcportbytes = connection.source_Port.to_bytes(16, "little")
         cs += connection.destination_Port
@@ -178,13 +231,13 @@ class RxPLayer:
         cs += connection.sequence_number >> 16
         cs += connection.sequence_number - (connection.sequence_number >> 16 << 16)
         snbytes = connection.sequence_number.to_bytes(32, "little")
-        cs += ack >> 16
-        cs += ack - (ack >> 16 << 16)
-        ackbytes = ack.to_bytes(32, "little")
+        cs += ackNum >> 16
+        cs += ackNum - (ackNum >> 16 << 16)
+        ackbytes = ackNum.to_bytes(32, "little")
         length = len(data)
         cs += length
         lengthbytes = length.to_bytes(16, "little")
-        fields = 0
+        fields = synbit << 2 + ackbit << 1 + endbit
         cs += fields
         fieldbytes = fields.to_bytes(8, "little")
         checksum = ~cs
