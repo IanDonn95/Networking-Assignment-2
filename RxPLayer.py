@@ -9,12 +9,27 @@ class RxPConnection:
         self.source_IP = "127.0.0.1" #should always work
         self.source_Port = 9000
         self.destination_IP = "127.0.0.1"
-        self.destination_Port = 9001
+        self.destination_Port = 0
         self.state = "READY"
         self.layer = layer
         self.sequence_number = 0
+        self.next_ack = -1
+        self.expected_seq_from_other = 0
         self.inbuffer = bytes(0)
         self.outbuffer = bytes(0)
+
+    def handlePacket(self, header, data):
+        if self.state == "LISTEN":
+            if header[6] == 1:
+                print("SYN received. Opening new connection.")
+                newcon = self.layer.addNewConnection(header)
+                newcon.handlePacket(header, data)
+        if self.state = "ClIENT-CONNECTING":
+                
+        if self.state == "ESTABLISHED":
+            if len(self.inbuffer) + header[4] <= self.bufferSize: #buffer cna take data
+                if self.sequence_number
+                self.inbuffer = self.inbuffer + data
 
     def Send(self, data):
         print("Buffering data")
@@ -47,14 +62,15 @@ class RxPConnection:
 
     def Listen(self, portnum):
         self.layer.addListeningPort(portnum, self.bufferSize)
-        self.state = "ESTABLISHED"
+        self.source_Port = portnum
+        self.state = "LISTEN"
 
     def Connect(self, portnum, destIP, destPort):
         self.source_Port = portnum
         self.destination_IP = destIP
         self.destination_Port = destPort
         self.layer.addListeningPort(portnum, self.bufferSize)
-        self.state = "ESTABLISHED"
+        self.state = "CONNECTING"
 
 class RxPLayer:
     def __init__(self):
@@ -111,7 +127,12 @@ class RxPLayer:
                 length = int.from_bytes(header[96:112], "little")
                 checksum = int.from_bytes(header[112:128], "little", signed = False)
                 fields = int.from_bytes(header[128:136], "little")
-                print(srcport, dstport, seqnum, acknum, length, checksum, fields)
+                synfield = int.from_bytes(header[133:134], "little")
+                ackfield = int.from_bytes(header[134:135], "little")
+                endfield = int.from_bytes(header[135:136], "little")
+                payload = data[0][17 * 8:]
+                print(str(payload, 'ASCII'))
+                #print(srcport, dstport, seqnum, acknum, length, checksum, fields)
 
                 cs = srcport
                 cs += dstport
@@ -123,10 +144,12 @@ class RxPLayer:
                 cs += fields
                 if checksum == ~cs & 65535:
                     print("Packet valid.")
+                    headertuple = (srcport, dstport, seqnum, acknum, length, checksum, synfield, ackfield, endfield)
+                    connection = self.getConnectionForPacket(headertuple)
+                    if connection != 0:
+                        connection.handlePacket(headertuple, data)
                 else:
                     print("Checksum incorrect. Rejecting packet.")
-                payload = data[0][17 * 8:]
-                print(str(payload, 'ASCII'))
 
             self.inbound_buffer_lock.release()
             self.outbound_buffer_lock.acquire()
@@ -135,6 +158,18 @@ class RxPLayer:
                     self.send(connection.outbuffer, connection, 0)
             self.outbound_buffer_lock.release()
 
+    def getConnectionForPacket(self, headertuple):
+        for connection in self.connections:
+            print(connection.source_Port, connection.destination_Port)
+            if connection.source_Port == headertuple[1] and connection.destination_Port == headertuple[0]:
+                print("Exact Connection found")
+                return connection
+        print("No exact connection found")
+        for connection in self.connections:
+            if connection.source_Port == headertuple[1]:
+                print("Open connection found")
+                return connection
+        return 0
     def send(self, data, connection, ack):
         cs = connection.source_Port
         srcportbytes = connection.source_Port.to_bytes(16, "little")
