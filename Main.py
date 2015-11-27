@@ -50,5 +50,6 @@ if isClient:
     connection = rxplayer.Initialize(1024)
     connection.Connect(args.port_arg, args.emu_ip_arg, args.emu_port_arg)
     while True:
-        connection.Send(bytes("TESTING TESTING RA RA RA", 'ASCII'))
+        added = connection.Send(bytes("TESTING TESTING RA RA RA", 'ASCII'))
+        dprint(added)
         time.sleep(.3)
