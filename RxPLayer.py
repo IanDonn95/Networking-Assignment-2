@@ -27,32 +27,40 @@ class RxPConnection:
                 print("SYN received. Opening new connection.")
                 newcon = self.layer.addNewConnection(header, bufferSize)
                 newcon.handlePacket(header, data)
-        if self.state == "ClIENT-CONNECTING":
+        elif self.state == "ClIENT-CONNECTING":
             if header[6] == 1:      # SYN
-                pass
                 # SEND SYN+ACK
+                self.syns.append(self.sequence_number)
+                self.sequence_number = self.sequence_number + 1;
+                self.acks.append(self.next_ack)
             elif header[7] == 1:    # ACK
                 self.state = "ESTABLISHED"
-        if self.state == "ESTABLISHED":
+        elif self.state == "ESTABLISHED":
             if len(self.inbuffer) + header[4] <= self.bufferSize: #buffer cna take data
                 if self.sequence_number:
                     self.inbuffer = self.inbuffer + data
+            if header[7] == 1:          # ACK
+                # handle receiving ack
+                pass
             if header[8] == 1:          # END
                 # SEND ACK
+                self.acks.append(self.next_ack)
                 self.state = "RECEIVED-CLOSING"
-        if self.state == "INITIATED-CLOSING":
+        elif self.state == "INITIATED-CLOSING":
             if header[7] == 1:      #  ACK
                 self.state = "INITIATOR-READY"
             elif header[8] == 1:    # END
                 # SEND ACK
+                self.acks.append(self.next_ack)
                 self.state = "SIMULTANEOUS-CLOSING"
-        if self.state == "SIMULTANEOUS-CLOSING":
+        elif self.state == "SIMULTANEOUS-CLOSING":
             if header[7] == 1:  # ACK
                 # remove connection
                 self.state = "TIMING-OUT"   # --> MAYBE HANDLE DIFFERENTLY
-        if self.state == "INITIATOR-READY":
+        elif self.state == "INITIATOR-READY":
             if header[8] == 1:  # END
                 # SEND ACK
+                self.acks.append(self.next_ack)
                 # remove connection
                 self.state = "TIMING-OUT"   # --> MAYBE HANDLE DIFFERENTLY
 
@@ -78,9 +86,11 @@ class RxPConnection:
     def Close(self):
         if self.state == "ESTABLISHED":
             # SEND END
+            self.ends.append(1);
             self.state = "INITIATED-CLOSING"
         elif self.state == "RECEIVIED-CLOSING":
             # SEND END
+            self.ends.append(1);
             self.state = "RECEIVER-READY"
         else:
             print("can't close right now")
