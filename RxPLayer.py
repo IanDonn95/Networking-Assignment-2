@@ -17,6 +17,9 @@ class RxPConnection:
         self.expected_seq_from_other = 0
         self.inbuffer = bytes(0)
         self.outbuffer = bytes(0)
+        self.syns = []
+        self.acks = []
+        self.ends = []
 
     def handlePacket(self, header, data):
         if self.state == "LISTEN":
@@ -26,6 +29,7 @@ class RxPConnection:
                 newcon.handlePacket(header, data)
         if self.state == "ClIENT-CONNECTING":
             if header[6] == 1:      # SYN
+                pass
                 # SEND SYN+ACK
             elif header[7] == 1:    # ACK
                 self.state = "ESTABLISHED"
@@ -38,7 +42,7 @@ class RxPConnection:
                 self.state = "RECEIVED-CLOSING"
         if self.state == "INITIATED-CLOSING":
             if header[7] == 1:      #  ACK
-                self.state = "INITIATOR-READY":
+                self.state = "INITIATOR-READY"
             elif header[8] == 1:    # END
                 # SEND ACK
                 self.state = "SIMULTANEOUS-CLOSING"
@@ -206,8 +210,18 @@ class RxPLayer:
             self.inbound_buffer_lock.release()
             self.outbound_buffer_lock.acquire()
             for connection in self.connections:
-                if len(connection.outbuffer) > 0:
-                    self.send(connection.outbuffer, connection, 0, 0 ,0 ,0)  # data, connection, acknum, synbit, ackbit, endbit
+                if len(connection.outbuffer) > 0:   # send data
+                    self.send(connection.outbuffer, connection, 0, 0, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
+                for (syn : connection.syns):    # send syns
+                    if (len(connection.acks) != 0): # check if we can send a synack
+                        self.send(connection.outbuffer, connection, connection.acks.pop(), 1, 1, 0)  # data, connection, acknum, synbit, ackbit, endbit
+                    else:         # not a synack, just a syn
+                        self.send(connection.outbuffer, connection, 0, 1, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
+                connection.syns = []    # we've gone through all waiting syns so we can empty this array now
+                for (ack : connection.acks):    # all synacks are done, send the acks left
+                    self.send(connection.outbuffer, connection, ack, 0, 1, 0)  # data, connection, acknum, synbit, ackbit, endbit
+                for (end : connection.ends):    # send all ends
+                    self.send(connection.outbuffer, connection, 0, 0 ,0 , 1)  # data, connection, acknum, synbit, ackbit, endbit
             self.outbound_buffer_lock.release()
 
     def getConnectionForPacket(self, headertuple):
