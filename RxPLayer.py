@@ -133,28 +133,32 @@ class RxPLayer:
         return newConn
 
     def addNewConnection(self, header, buffer):
+        print("Making new connection")
         newConn = self.Initialize(buffer)
         newConn.state = "ClIENT-CONNECTING"
         newConn.destination_Port = header[0]
-        self.addListeningPort(header[0], buffer)
+        newConn.source_Port = header[1]
+        print("Incrementing port")
+        self.addListeningPort(header[1], buffer)
+        print("New connection made")
         return newConn
 
 
     #adds a new UDP socket to listen on if no active connections are already using it
     def addListeningPort(self, portnum, buffer):
-        self.inbound_buffer_lock.acquire()
-        self.outbound_buffer_lock.acquire()
-
+        #self.inbound_buffer_lock.acquire()
+        #self.outbound_buffer_lock.acquire()
         if portnum not in self.UDPlayer.keys():
             newSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             newSock.bind(("127.0.0.1", portnum))
             newSock.setblocking(False)
             self.UDPlayer[portnum] = (newSock, buffer, 1)
         else:
-            sock, buffer, count = UDPlayer[portnum]
+            print("Socket already exists")
+            sock, buffer, count = self.UDPlayer[portnum]
             self.UDPlayer[portnum] = (sock, buffer, count + 1)
-        self.inbound_buffer_lock.release()
-        self.outbound_buffer_lock.release()
+        #self.inbound_buffer_lock.release()
+        #self.outbound_buffer_lock.release()
 
     # removes the port from the dictionary
     # removes all connections with that source port number
@@ -244,7 +248,8 @@ class RxPLayer:
         for connection in self.connections:
             if connection.source_Port == headertuple[1] and connection.destination_Port == 0:
                 print("Open connection found")
-                return connection
+                newcon = self.addNewConnection(headertuple, connection.bufferSize)
+                return newcon
         return 0
 
     def send(self, data, connection, ackNum, synbit, ackbit, endbit):
