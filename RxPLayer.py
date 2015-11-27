@@ -37,8 +37,9 @@ class RxPConnection:
 
     def Close(self):
         a=1
-    
+
     def SetBuffer(self, buffer):
+        self.bufferSize = buffer # is this wrong? I was pretty sure this is it
         a=1
 
     def GetBuffer(self):
@@ -67,17 +68,17 @@ class RxPLayer:
         self.thread.start()
         self.inbound_buffer_lock.release()
         self.outbound_buffer_lock.release()
-    
+
     def Initialize(self, buffer):
         newConn = RxPConnection(self, buffer)
         self.connections += [newConn]
         return newConn
-    
-    #adds a new UDP socket to listen on if no active connections are already using it    
+
+    #adds a new UDP socket to listen on if no active connections are already using it
     def addListeningPort(self, portnum, buffer):
         self.inbound_buffer_lock.acquire()
         self.outbound_buffer_lock.acquire()
-        
+
         if portnum not in self.UDPlayer.keys():
             newSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             newSock.bind(("127.0.0.1", portnum))
@@ -158,5 +159,3 @@ class RxPLayer:
         print(connection.source_Port, connection.destination_Port, connection.destination_IP)
         self.UDPlayer[connection.source_Port][0].sendto(packet, (connection.destination_IP, connection.destination_Port))
         connection.outbuffer = bytes(0)
-
-        
