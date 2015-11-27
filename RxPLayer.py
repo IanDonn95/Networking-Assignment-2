@@ -121,9 +121,9 @@ class RxPLayer:
                 cs += length
                 cs += fields
                 if checksum == ~cs & 65535:
-
+                    print("Packet valid.")
                 else:
-                    print("Checksum incorrect. Rejecting Packet")
+                    print("Checksum incorrect. Rejecting packet.")
                 payload = data[0][17 * 8:]
                 print(str(payload, 'ASCII'))
 
