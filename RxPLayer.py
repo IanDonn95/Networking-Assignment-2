@@ -222,15 +222,15 @@ class RxPLayer:
             for connection in self.connections:
                 if len(connection.outbuffer) > 0:   # send data
                     self.send(connection.outbuffer, connection, 0, 0, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
-                for (syn : connection.syns):    # send syns
+                for syn in connection.syns:    # send syns
                     if (len(connection.acks) != 0): # check if we can send a synack
                         self.send(connection.outbuffer, connection, connection.acks.pop(), 1, 1, 0)  # data, connection, acknum, synbit, ackbit, endbit
                     else:         # not a synack, just a syn
                         self.send(connection.outbuffer, connection, 0, 1, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
                 connection.syns = []    # we've gone through all waiting syns so we can empty this array now
-                for (ack : connection.acks):    # all synacks are done, send the acks left
+                for ack in connection.acks:    # all synacks are done, send the acks left
                     self.send(connection.outbuffer, connection, ack, 0, 1, 0)  # data, connection, acknum, synbit, ackbit, endbit
-                for (end : connection.ends):    # send all ends
+                for end in connection.ends:    # send all ends
                     self.send(connection.outbuffer, connection, 0, 0 ,0 , 1)  # data, connection, acknum, synbit, ackbit, endbit
             self.outbound_buffer_lock.release()
 
