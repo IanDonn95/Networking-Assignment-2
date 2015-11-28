@@ -277,8 +277,10 @@ class RxPLayer:
                 connection.syns = []    # we've gone through all waiting syns so we can empty this array now
                 for ack in connection.acks:    # all synacks are done, send the acks left
                     self.send(connection.outbuffer, connection, ack, 0, 1, 0)  # data, connection, acknum, synbit, ackbit, endbit
+                connection.acks = []
                 for end in connection.ends:    # send all ends
                     self.send(connection.outbuffer, connection, 0, 0 ,0 , 1)  # data, connection, acknum, synbit, ackbit, endbit
+                connection.ends = []
             self.outbound_buffer_lock.release()
 
     def getConnectionForPacket(self, headertuple):
