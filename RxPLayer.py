@@ -17,6 +17,8 @@ class RxPConnection:
         self.expected_seq_from_other = 0
         self.inbuffer = bytes(0)
         self.outbuffer = bytes(0)
+        self.expectedAck = 0
+        self.sentPacketsBuffer = []
         self.syns = []
         self.acks = []
         self.ends = []
@@ -41,11 +43,15 @@ class RxPConnection:
                     self.inbuffer = self.inbuffer + data
             if header[7] == 1:          # ACK
                 # handle receiving ack
+#                if (header[3] == self.expectedAck):
+
                 pass
             if header[8] == 1:          # END
                 # SEND ACK
                 self.acks.append(self.next_ack)
                 self.state = "RECEIVED-CLOSING"
+            if header[7] == 0 and header[8] == 0:
+                self.acks.append(self.next_ack)
         elif self.state == "INITIATED-CLOSING":
             if header[7] == 1:      #  ACK
                 self.state = "INITIATOR-READY"
@@ -202,7 +208,7 @@ class RxPLayer:
                 endfield = int.from_bytes(header[135:136], "little")
                 payload = data[0][17 * 8:]
                 print(str(payload, 'ASCII'))
-                #print(srcport, dstport, seqnum, acknum, length, checksum, fields)
+                #print(srcport, dstport, seqnum, acknum, length, checksum, fielgfds)
 
                 cs = srcport
                 cs += dstport
@@ -215,6 +221,7 @@ class RxPLayer:
                 if checksum == ~cs & 65535:
                     print("Packet valid.")
                     headertuple = (srcport, dstport, seqnum, acknum, length, checksum, synfield, ackfield, endfield)
+                    connection.nextAck = seqnum + length
                     connection = self.getConnectionForPacket(headertuple)
                     if connection != 0:
                         connection.handlePacket(headertuple, data)
@@ -273,6 +280,9 @@ class RxPLayer:
         checksum = checksum & 65535
         csbytes = checksum.to_bytes(16, "little", signed = False)
         packet = srcportbytes + dstportbytes + snbytes + ackbytes + lengthbytes + csbytes + fieldbytes + data
+        connection.sentPacketsBuffer.append(packet)
+        if (connection.expectedAck == 0):
+            connection.expectedAck = connection.sequence_number + length
         print(connection.source_Port, connection.destination_Port, connection.destination_IP)
         self.UDPlayer[connection.source_Port][0].sendto(packet, (connection.destination_IP, connection.destination_Port))
         connection.outbuffer = bytes(0)
