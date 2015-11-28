@@ -10,6 +10,7 @@ class RxPConnection:
         self.source_Port = 9000
         self.destination_IP = "127.0.0.1"
         self.destination_Port = 0
+        self.real_destination_Port = 0
         self.state = "READY"
         self.layer = layer
         self.sequence_number = 0
@@ -24,12 +25,17 @@ class RxPConnection:
         self.ends = []
 
     def handlePacket(self, header, data):
+        print("header ",header)
         if self.state == "LISTEN":
             if header[6] == 1:
                 print("SYN received. Opening new connection.")
                 newcon = self.layer.addNewConnection(header, bufferSize)
                 newcon.handlePacket(header, data)
-        elif self.state == "ClIENT-CONNECTING":
+        elif self.state == "CONNECTING":
+            if (header[6] == 1 and header[7] == 1):
+                print ("connecting -> established")
+                self.state = "ESTABLISHED"
+        elif self.state == "CLIENT-CONNECTING":
             if header[6] == 1:      # SYN
                 # SEND SYN+ACK
                 self.syns.append(self.sequence_number)
@@ -117,7 +123,11 @@ class RxPConnection:
         self.source_Port = portnum
         self.destination_IP = destIP
         self.destination_Port = destPort
+        self.real_destination_Port = portnum + 1
         self.layer.addListeningPort(portnum, self.bufferSize)
+        self.sequence_number = 50
+        self.syns.append(self.sequence_number)
+        self.sequence_number = self.sequence_number +  1
         self.state = "CONNECTING"
 
 class RxPLayer:
@@ -156,6 +166,7 @@ class RxPLayer:
     def addListeningPort(self, portnum, buffer):
         #self.inbound_buffer_lock.acquire()
         #self.outbound_buffer_lock.acquire()
+        print (self.UDPlayer.keys())
         if portnum not in self.UDPlayer.keys():
             newSock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             newSock.bind(("127.0.0.1", portnum))
@@ -233,6 +244,8 @@ class RxPLayer:
             self.inbound_buffer_lock.release()
             self.outbound_buffer_lock.acquire()
             for connection in self.connections:
+                #print("hi")
+                #print (connection.state)
                 if len(connection.outbuffer) > 0:   # send data
                     self.send(connection.outbuffer, connection, 0, 0, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
                 for syn in connection.syns:    # send syns
@@ -255,6 +268,9 @@ class RxPLayer:
                 return connection
         print("No exact connection found")
         for connection in self.connections:
+            print (connection.source_Port)
+            print (connection.destination_Port)
+            print (headertuple[1])
             if connection.source_Port == headertuple[1] and connection.destination_Port == 0:
                 print("Open connection found")
                 newcon = self.addNewConnection(headertuple, connection.bufferSize)
@@ -264,8 +280,8 @@ class RxPLayer:
     def send(self, data, connection, ackNum, synbit, ackbit, endbit):
         cs = connection.source_Port
         srcportbytes = connection.source_Port.to_bytes(16, "little")
-        cs += connection.destination_Port
-        dstportbytes = connection.destination_Port.to_bytes(16, "little")
+        cs += connection.real_destination_Port
+        dstportbytes = connection.real_destination_Port.to_bytes(16, "little")
         cs += connection.sequence_number >> 16
         cs += connection.sequence_number - (connection.sequence_number >> 16 << 16)
         snbytes = connection.sequence_number.to_bytes(32, "little")
@@ -285,6 +301,6 @@ class RxPLayer:
         connection.sentPacketsBuffer.append(packet)
         if (connection.expectedAck == 0):
             connection.expectedAck = connection.sequence_number + length
-        print(connection.source_Port, connection.destination_Port, connection.destination_IP)
+        print(connection.source_Port, connection.real_destination_Port, connection.destination_IP)
         self.UDPlayer[connection.source_Port][0].sendto(packet, (self.emuip, self.emuport))
         connection.outbuffer = bytes(0)
