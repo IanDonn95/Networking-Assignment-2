@@ -23,7 +23,7 @@ class RxPConnection:
         self.syns = []
         self.acks = []
         self.ends = []
-        self.markedToDie = False
+        self.markedToDie = 0
 
     def handlePacket(self, header, data):
         #print("header ",header)
@@ -116,7 +116,9 @@ class RxPConnection:
         a=1
 
     def Close(self):
+        sys.exit()
         if self.state == "ESTABLISHED":
+            print (self.state)
             # SEND END
             self.ends.append(1);
             self.state = "INITIATED-CLOSING"
@@ -127,8 +129,10 @@ class RxPConnection:
         else:
             print("can't close right now")
 
-    def Kill ():
-        self.markedToDie = True
+    def Kill (self):
+        #sys.exit()
+        for connection in self.layer.connections:
+            connection.markedToDie = 1
         self.State = "DEAD"
 
     def SetBuffer(self, buffer):
@@ -168,6 +172,7 @@ class RxPLayer:
         self.thread.start()
         self.inbound_buffer_lock.release()
         self.outbound_buffer_lock.release()
+        self.ignore = 0
 
     def Initialize(self, buffer):
         newConn = RxPConnection(self, buffer)
@@ -274,8 +279,7 @@ class RxPLayer:
 
             self.inbound_buffer_lock.release()
             self.outbound_buffer_lock.acquire()
-            newConnections = self.connections
-            changed = 0
+            alldead = 1
             for connection in self.connections:
                 #print("hi")
                 #print (connection.state)
@@ -296,14 +300,15 @@ class RxPLayer:
                 for end in connection.ends:    # send all ends
                     self.send(connection.outbuffer, connection, 0, 0 ,0 , 1)  # data, connection, acknum, synbit, ackbit, endbit
                 connection.ends = []
-                if (connection.markedToDie == True and len(connection.outbuffer)==0):
-                    changed = 1
-                    newConnections = self.connections
-                    newConnections.remove(connection)
-                    self.UDPlayer.pop(connection.source_Port)
+                if (connection.markedToDie == 1 and len(connection.outbuffer)==0):
+                    pass
+                else:
+                    alldead = 0
             self.outbound_buffer_lock.release()
-            if changed:
-                self.connections = newConnection
+
+            if (self.ignore == 0 and alldead == 1 and self.connections != None and len(self.connections) != 0):
+                print ("Goodbye")
+                sys.exit()
 
     def getConnectionForPacket(self, headertuple):
         for connection in self.connections:
@@ -324,6 +329,9 @@ class RxPLayer:
                 newcon = self.addNewConnection(headertuple, connection.bufferSize)
                 return newcon
         return 0
+
+    def ig(self):
+        self.ignore = 1
 
     def send(self, data, connection, ackNum, synbit, ackbit, endbit):
         cs = 0

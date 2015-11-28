@@ -88,7 +88,7 @@ class FxA:
                 print("only client can get and post")
                 # if not, return 0
                 return "0"
-            if (inputs[1] != None):
+            if (inputs[1] == None):
                 print ("the second argument is the file")
                 return "0"
         return "1"

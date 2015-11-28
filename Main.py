@@ -57,7 +57,8 @@ if isServer:
         elif (inputs[0] == 'terminate'):        # terminate command
             print ("ending")
             # any end scripts here
-            connection.Close()
+            #connection.Close()
+            connection.Kill()
             exit()
         elif (inputs[0] == 'window'):           # window command
             print("changing window")
@@ -66,6 +67,7 @@ if isServer:
 if isClient:
     #connection = rxplayer.Initialize(1024)
     #connection.Connect(args.port_arg, args.emu_ip_arg, args.emu_port_arg)
+    connection = None
     while True:
         # uncomment this when needed
         userInput = input()
@@ -75,6 +77,7 @@ if isClient:
             print ("Try again")
             continue
         elif (inputs[0] == "connect"):       # connect
+            rxplayer.ig()
             connection = rxplayer.Initialize(1024)
             connection.Connect(args.port_arg, args.emu_ip_arg, args.emu_port_arg)
         elif (inputs[0] == "get"):           # get
@@ -96,7 +99,8 @@ if isClient:
         elif (inputs[0] == "disconnect"):    # disconnect
             print ("ending")
             # any end scripts here
-            exit()
+#            if (connection != None):
+#                connection.Kill()
         #added = connection.Send(bytes("TESTING TESTING RA RA RA", 'ASCII'))
         #dprint(added)
         time.sleep(.3)
