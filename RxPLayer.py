@@ -121,7 +121,9 @@ class RxPConnection:
         self.state = "CONNECTING"
 
 class RxPLayer:
-    def __init__(self):
+    def __init__(self, emuip, emuport):
+        self.emuip = emuip
+        self.emuport = emuport
         self.connections = []
         self.inbound_buffer_lock = threading.Lock()
         self.outbound_buffer_lock = threading.Lock()
@@ -284,5 +286,5 @@ class RxPLayer:
         if (connection.expectedAck == 0):
             connection.expectedAck = connection.sequence_number + length
         print(connection.source_Port, connection.destination_Port, connection.destination_IP)
-        self.UDPlayer[connection.source_Port][0].sendto(packet, (connection.destination_IP, connection.destination_Port))
+        self.UDPlayer[connection.source_Port][0].sendto(packet, (self.emuip, self.emuport))
         connection.outbuffer = bytes(0)
