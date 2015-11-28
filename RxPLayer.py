@@ -26,22 +26,33 @@ class RxPConnection:
 
     def handlePacket(self, header, data):
         print("header ",header)
+        print (self.state)
         if self.state == "LISTEN":
+            print (header[6])
+            print  (header[6] == 1)
             if header[6] == 1:
                 print("SYN received. Opening new connection.")
-                newcon = self.layer.addNewConnection(header, bufferSize)
-                newcon.handlePacket(header, data)
+                #newcon = self.layer.addNewConnection(header, self.bufferSize)
+                #newcon.handlePacket(header, data)
+                # SEND SYN+ACK
+                self.syns.append(self.sequence_number)
+                self.next_ack = header[2] + header[4]
+                self.sequence_number = self.sequence_number + 1;
+                self.acks.append(self.next_ack)
+                self.state = "CLIENT-CONNECTING"
         elif self.state == "CONNECTING":
             if (header[6] == 1 and header[7] == 1):
                 print ("connecting -> established")
+                self.acks.append(self.nextAck)
                 self.state = "ESTABLISHED"
         elif self.state == "CLIENT-CONNECTING":
-            if header[6] == 1:      # SYN
+            #if header[6] == 1:      # SYN
                 # SEND SYN+ACK
-                self.syns.append(self.sequence_number)
-                self.sequence_number = self.sequence_number + 1;
-                self.acks.append(self.next_ack)
-            elif header[7] == 1:    # ACK
+                #self.syns.append(self.sequence_number)
+                #self.sequence_number = self.sequence_number + 1;
+                #self.acks.append(self.next_ack)
+            if header[7] == 1:    # ACK
+                print ("yes we got there")
                 self.state = "ESTABLISHED"
         elif self.state == "ESTABLISHED":
             if len(self.inbuffer) + header[4] <= self.bufferSize: #buffer cna take data
@@ -153,8 +164,9 @@ class RxPLayer:
     def addNewConnection(self, header, buffer):
         print("Making new connection")
         newConn = self.Initialize(buffer)
-        newConn.state = "ClIENT-CONNECTING"
+        newConn.state = "LISTEN"
         newConn.destination_Port = header[0]
+        newConn.real_destination_Port = header[1] - 1
         newConn.source_Port = header[1]
         print("Incrementing port")
         self.addListeningPort(header[1], buffer)
@@ -216,10 +228,14 @@ class RxPLayer:
                 length = int.from_bytes(header[96:112], "little")
                 checksum = int.from_bytes(header[112:128], "little", signed = False)
                 fields = int.from_bytes(header[128:136], "little")
-                synfield = int.from_bytes(header[133:134], "little")
-                ackfield = int.from_bytes(header[134:135], "little")
-                endfield = int.from_bytes(header[135:136], "little")
+#                synfield = int.from_bytes(header[133:134], "little")
+#                ackfield = int.from_bytes(header[134:135], "little")
+#                endfield = int.from_bytes(header[135:136], "little")
+                synfield = (fields&4) >> 2
+                ackfield = (fields&2) >> 1
+                endfield = fields & 1
                 payload = data[0][17 * 8:]
+                print ("fields",fields)
                 print(str(payload, 'ASCII'))
                 #print(srcport, dstport, seqnum, acknum, length, checksum, fielgfds)
                 cs = 0
@@ -251,9 +267,12 @@ class RxPLayer:
                 if len(connection.outbuffer) > 0:   # send data
                     self.send(connection.outbuffer, connection, 0, 0, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
                 for syn in connection.syns:    # send syns
-                    if (len(connection.acks) != 0): # check if we can send a synack
+                    if (len(connection.acks) != 0): # check if we can send a synack'
+                        print (connection.acks[len(connection.acks)-1])
+                        print ('hi')
                         self.send(connection.outbuffer, connection, connection.acks.pop(), 1, 1, 0)  # data, connection, acknum, synbit, ackbit, endbit
                     else:         # not a synack, just a syn
+                        print ('hi')
                         self.send(connection.outbuffer, connection, 0, 1, 0, 0)  # data, connection, acknum, synbit, ackbit, endbit
                 connection.syns = []    # we've gone through all waiting syns so we can empty this array now
                 for ack in connection.acks:    # all synacks are done, send the acks left
@@ -264,15 +283,18 @@ class RxPLayer:
 
     def getConnectionForPacket(self, headertuple):
         for connection in self.connections:
-            print(connection.source_Port, connection.destination_Port)
-            if connection.source_Port == headertuple[1] and connection.destination_Port == headertuple[0]:
+            print(connection.source_Port, connection.real_destination_Port)
+            print (headertuple[1])
+            print (headertuple[0])
+            if connection.source_Port == headertuple[1] and connection.real_destination_Port == headertuple[0]:
                 print("Exact Connection found")
                 return connection
         print("No exact connection found")
         for connection in self.connections:
-            print (connection.source_Port)
-            print (connection.destination_Port)
-            print (headertuple[1])
+#            print (connection.source_Port)
+#            print (connection.destination_Port)
+#            print (headertuple[1])
+#            print (headertuple[0])
             if connection.source_Port == headertuple[1] and connection.destination_Port == 0:
                 print("Open connection found")
                 newcon = self.addNewConnection(headertuple, connection.bufferSize)
@@ -286,6 +308,7 @@ class RxPLayer:
         cs += connection.source_Port
         srcportbytes = connection.source_Port.to_bytes(16, "little")
         cs += connection.real_destination_Port
+        print (connection.real_destination_Port)
         dstportbytes = connection.real_destination_Port.to_bytes(16, "little")
         cs += connection.sequence_number >> 16
         cs += connection.sequence_number - (connection.sequence_number >> 16 << 16)
@@ -296,7 +319,7 @@ class RxPLayer:
         length = len(data)
         cs += length
         lengthbytes = length.to_bytes(16, "little")
-        fields = synbit << 2 + ackbit << 1 + endbit
+        fields = (synbit << 2) + (ackbit << 1) + endbit
         cs += fields
         fieldbytes = fields.to_bytes(8, "little")
         checksum = ~cs
@@ -306,6 +329,7 @@ class RxPLayer:
         connection.sentPacketsBuffer.append(packet)
         if (connection.expectedAck == 0):
             connection.expectedAck = connection.sequence_number + length
+        print (fieldbytes)
         print(connection.source_Port, connection.real_destination_Port, connection.destination_IP)
         self.UDPlayer[connection.source_Port][0].sendto(packet, (self.emuip, self.emuport))
         connection.outbuffer = bytes(0)
