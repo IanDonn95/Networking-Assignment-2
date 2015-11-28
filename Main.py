@@ -40,7 +40,7 @@ if args.emu_port_arg < 0 or args.emu_port_arg > 65535:
     print("Invalid binding port. Please use a valid port number.")
 
 #create RxP layer
-rxplayer = RxPLayer.RxPLayer()
+rxplayer = RxPLayer.RxPLayer(args.emu_ip_arg, args.emu_port_arg)
 
 fxa = FxA.FxA(isClient, args.port_arg, args.emu_ip_arg, args.emu_port_arg)
 
