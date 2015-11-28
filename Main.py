@@ -57,6 +57,7 @@ if isServer:
         elif (inputs[0] == 'terminate'):        # terminate command
             print ("ending")
             # any end scripts here
+            connection.Close()
             exit()
         elif (inputs[0] == 'window'):           # window command
             print("changing window")
