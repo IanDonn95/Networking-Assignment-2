@@ -211,8 +211,10 @@ class RxPLayer:
                 payload = data[0][17 * 8:]
                 print(str(payload, 'ASCII'))
                 #print(srcport, dstport, seqnum, acknum, length, checksum, fielgfds)
-
-                cs = srcport
+                cs = 0
+                for byte in payload:
+                    cs += byte
+                cs += srcport
                 cs += dstport
                 cs += seqnum >> 16
                 cs += seqnum - (seqnum >> 16 << 16)
@@ -262,7 +264,10 @@ class RxPLayer:
         return 0
 
     def send(self, data, connection, ackNum, synbit, ackbit, endbit):
-        cs = connection.source_Port
+        cs = 0
+        for byte in data:
+            cs += byte
+        cs += connection.source_Port
         srcportbytes = connection.source_Port.to_bytes(16, "little")
         cs += connection.destination_Port
         dstportbytes = connection.destination_Port.to_bytes(16, "little")
